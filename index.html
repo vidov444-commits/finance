@@ -330,9 +330,11 @@ html[data-theme="dark"] .pbig>span{text-shadow:0 1px 3px rgba(0,0,0,.6)}
   #month{width:auto;flex:1 1 auto;min-width:104px;height:36px;font-size:13px}
   .rate{height:36px}
   #theme,#cloudBtn{height:36px;padding:0 10px}
-  .acts{order:3;width:100%;margin:0;gap:6px;display:grid;grid-template-columns:repeat(3,1fr);overflow:visible}
-  .acts button{height:38px;padding:0 8px;font-size:12.5px;border-radius:11px;white-space:nowrap;
-               overflow:hidden;text-overflow:ellipsis}
+  .acts{order:3;width:100%;margin:0;gap:6px;display:flex;flex-wrap:wrap;overflow:visible}
+  .acts button{height:40px;padding:0 8px;font-size:13px;border-radius:11px;white-space:nowrap;
+               overflow:hidden;text-overflow:ellipsis;flex:0 0 auto}
+  .acts button:nth-child(1),.acts button:nth-child(2){width:calc(50% - 3px)}
+  .acts button:nth-child(3),.acts button:nth-child(4),.acts button:nth-child(5){width:calc(33.333% - 4px)}
   .tot{order:2;width:100%;display:grid;grid-template-columns:repeat(4,1fr);gap:4px;
        border:none;border-top:1px solid var(--line);padding:7px 0 0;margin-top:2px;
        background:transparent;box-shadow:none;border-radius:0}
@@ -366,8 +368,19 @@ html[data-theme="dark"] .pbig>span{text-shadow:0 1px 3px rgba(0,0,0,.6)}
   .gs-i{flex:1 1 30%;order:3;text-align:left}
   .gs-go{flex:1 1 100%;order:4;height:38px}
 
+  html.mopen,html.mopen body{overflow:hidden!important}
   .mask{padding:0;align-items:flex-end}
   .modal{width:100%!important;max-width:100%;max-height:94vh;border-radius:16px 16px 0 0}
+  /* главное окно — постоянная высота, содержимое листается внутри */
+  #modalBox{height:90vh;height:90dvh;max-height:90dvh}
+  #modalBox .mb{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;
+                -webkit-overflow-scrolling:touch}
+  #modalBox .mb *{max-width:100%}
+  #modalBox .mb input,#modalBox .mb select,#modalBox .mb textarea{
+                width:100%;min-width:0;box-sizing:border-box}
+  #modalBox .mb .f>div{min-width:0}
+  #c,#c2{flex:0 0 78px;width:78px!important;padding-left:4px;padding-right:4px}
+  #a,#a2{flex:1 1 auto;min-width:0}
   .modal h3{padding:14px 16px 10px;font-size:16px;position:sticky;top:0;background:var(--card);z-index:2}
   .modal .mb{padding:2px 14px 16px;font-size:14.5px}
   .modal .mf{padding:10px 14px calc(12px + env(safe-area-inset-bottom));flex-wrap:wrap;gap:8px;
@@ -545,9 +558,9 @@ function seed(){
 let S=JSON.parse(localStorage.getItem(KEY)||'null')||seed();
 if(!S.modules)S.modules=defMods();
 Object.keys(MODS).forEach(k=>{if(!S.modules[k])S.modules[k]={title:MODS[k],hidden:false};});
-delete S.modules.goal;
+Object.keys(S.modules).forEach(k=>{if(!MODS[k])delete S.modules[k];});
 S.payments=(S.payments||[]).filter(p=>p.kind!=='goal');
-if(S.layout)Object.keys(S.layout).forEach(c=>S.layout[c]=S.layout[c].filter(k=>k!=='goal'));
+if(S.layout)Object.keys(S.layout).forEach(c=>S.layout[c]=(S.layout[c]||[]).filter(k=>MODS[k]));
 S.payments.forEach(p=>{if(!p.done)p.done={};});
 if(!S.settings.theme)S.settings.theme='light';
 if(!S.goals)S.goals=[];
@@ -650,10 +663,12 @@ function openModal(title,html,footer,wide,lock){
   $('mTitle').textContent=title;$('mBody').innerHTML=html;$('mFoot').innerHTML='';
   (footer||[]).forEach(b=>{const el=document.createElement('button');el.textContent=b.t;if(b.p)el.className='pri';
     if(b.d)el.style.marginRight='auto';el.onclick=b.f;if(b.id)el.id=b.id;$('mFoot').appendChild(el);});
-  $('mask').classList.add('on');
+  $('mask').classList.add('on');bgLock();
   watchDirty($('mBody'),()=>MDIRTY=true);
 }
-function closeModal(){MLOCK=false;$('mask').classList.remove('on');}
+function bgLock(){document.documentElement.classList.toggle('mopen',
+  $('mask').classList.contains('on')||$('mask2').classList.contains('on'));}
+function closeModal(){MLOCK=false;$('mask').classList.remove('on');bgLock();}
 function tryClose(){
   if(MLOCK&&MDIRTY)return dlg('Закрыть окно?','<p style="padding:4px 0 8px">Введённые данные не сохранены. Закрыть без сохранения?</p>',
     [{t:'Остаться',f:closeDlg},{t:'Закрыть',p:1,f:()=>{closeDlg();closeModal();}}]);
@@ -661,7 +676,7 @@ function tryClose(){
 $('mask').onclick=e=>{if(e.target===$('mask')&&!MLOCK)closeModal();};
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){
   if($('mask2').classList.contains('on'))closeDlg();else if(!MLOCK)closeModal();}});
-function closeDlg(){$('mask2').classList.remove('on');$('modalBox2').style.width='430px';
+function closeDlg(){$('mask2').classList.remove('on');bgLock();$('modalBox2').style.width='430px';
   document.querySelector('#modalBox2 .x2').style.display='none';}
 /* полноценное окно поверх текущего */
 let M2CLOSE=null;
@@ -671,7 +686,7 @@ function openModal2(title,html,footer,w){
   $('dTitle').textContent=title;$('dBody').innerHTML=html;$('dFoot').innerHTML='';
   (footer||[]).forEach(b=>{const el=document.createElement('button');el.textContent=b.t;if(b.p)el.className='pri';
     if(b.d)el.style.marginRight='auto';el.onclick=b.f;if(b.id)el.id=b.id;$('dFoot').appendChild(el);});
-  $('mask2').classList.add('on');M2DIRTY=false;
+  $('mask2').classList.add('on');M2DIRTY=false;bgLock();
   watchDirty($('dBody'),()=>M2DIRTY=true);
   const i=$('dBody').querySelector('input:not([type=date]),select,textarea');if(i)setTimeout(()=>i.focus(),50);
 }
@@ -2053,7 +2068,7 @@ $('menu').onclick=()=>{
       <div class="v" style="font-size:16px">${iso(today).split('-').reverse().join('.')}
         <span class="hint">${TZNAME||'—'} · UTC${TZOFF}</span></div></div>
     <div class="kpi" style="margin-bottom:14px"><div class="l">Версия программы</div>
-      <div class="v" style="font-size:16px">v22 · 23.08.2026</div></div>
+      <div class="v" style="font-size:16px">v23 · 23.08.2026</div></div>
     <div class="f"><label>Показывать модули</label>${mods}</div>
     <div class="f"><label>Названия модулей</label>
       <button id="bReset" style="width:100%">Вернуть стандартные названия</button></div>
@@ -2089,9 +2104,9 @@ $('mBody').addEventListener('click',e=>{
 $('fileIn').onchange=e=>{const r=new FileReader();r.onload=()=>{try{S=JSON.parse(r.result);
   if(!S.modules)S.modules=defMods();
   Object.keys(MODS).forEach(k=>{if(!S.modules[k])S.modules[k]={title:MODS[k],hidden:false};});
-delete S.modules.goal;
+Object.keys(S.modules).forEach(k=>{if(!MODS[k])delete S.modules[k];});
 S.payments=(S.payments||[]).filter(p=>p.kind!=='goal');
-if(S.layout)Object.keys(S.layout).forEach(c=>S.layout[c]=S.layout[c].filter(k=>k!=='goal'));
+if(S.layout)Object.keys(S.layout).forEach(c=>S.layout[c]=(S.layout[c]||[]).filter(k=>MODS[k]));
   S.payments.forEach(p=>{if(!p.done)p.done={};});
   if(!S.settings.theme)S.settings.theme='light';
   if(!S.goals)S.goals=[];
