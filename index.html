@@ -376,8 +376,11 @@ html[data-theme="dark"] .pbig>span{text-shadow:0 1px 3px rgba(0,0,0,.6)}
   #modalBox .mb{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;
                 -webkit-overflow-scrolling:touch}
   #modalBox .mb *{max-width:100%}
-  #modalBox .mb input,#modalBox .mb select,#modalBox .mb textarea{
-                width:100%;min-width:0;box-sizing:border-box}
+  #modalBox .mb input:not([type=checkbox]):not([type=radio]),
+  #modalBox .mb select,#modalBox .mb textarea{width:100%;min-width:0;box-sizing:border-box}
+  #modalBox .mb .chk{align-items:flex-start}
+  #modalBox .mb .chk input{flex:0 0 20px;width:20px;height:20px;margin-top:1px}
+  #modalBox .mb .chk label{flex:1 1 auto;text-align:left}
   #modalBox .mb .f>div{min-width:0}
   #c,#c2{flex:0 0 78px;width:78px!important;padding-left:4px;padding-right:4px}
   #a,#a2{flex:1 1 auto;min-width:0}
@@ -433,7 +436,7 @@ html[data-theme="dark"] .pbig>span{text-shadow:0 1px 3px rgba(0,0,0,.6)}
   <div class="tot" id="tot"></div>
   <div class="sep"></div>
   <div class="acts">
-    <button class="pri" id="addIn">+ Доход</button>
+    <button id="addIn">+ Доход</button>
     <button id="addOut">− Расход</button>
     <button id="addTr">⇄ Перевод</button>
     <button id="anal">Аналитика</button>
@@ -2068,7 +2071,7 @@ $('menu').onclick=()=>{
       <div class="v" style="font-size:16px">${iso(today).split('-').reverse().join('.')}
         <span class="hint">${TZNAME||'—'} · UTC${TZOFF}</span></div></div>
     <div class="kpi" style="margin-bottom:14px"><div class="l">Версия программы</div>
-      <div class="v" style="font-size:16px">v23 · 23.08.2026</div></div>
+      <div class="v" style="font-size:16px">v24 · 23.08.2026</div></div>
     <div class="f"><label>Показывать модули</label>${mods}</div>
     <div class="f"><label>Названия модулей</label>
       <button id="bReset" style="width:100%">Вернуть стандартные названия</button></div>
