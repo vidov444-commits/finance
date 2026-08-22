@@ -520,7 +520,7 @@ function seed(){
   const base={settings:{rate:79,lastAcc:'',lastCat:'',theme:'light',chart:'line'},modules:defMods(),tx:[],goals:[]};
   if(!DEMO)return {...base,
     sections:[1,2,3,4].map(i=>({id:'s'+i,name:'Секция '+i,cls:'s'+i})),
-    accounts:[],sources:[],debts:[],payments:[],catsExp:[...EXP],catsInc:[...INC]};
+    accounts:[],sources:[],debts:[],payments:[],catsExp:['Прочее'],catsInc:['Прочее']};
   const sections=[{id:'s1',name:'Трейдинг',cls:'s1'},{id:'s2',name:'Личное',cls:'s2'},
                   {id:'s3',name:'Прочее',cls:'s3'},{id:'s4',name:'Фонды',cls:'s4'}];
   const accounts=[
@@ -2053,7 +2053,7 @@ $('menu').onclick=()=>{
     <label for="m_${k}">${S.modules[k].title}</label></div>`).join('');
   openModal('Настройки',
    `<div class="kpi" style="margin-bottom:14px"><div class="l">Версия программы</div>
-      <div class="v" style="font-size:16px">v18 · 22.08.2026</div></div>
+      <div class="v" style="font-size:16px">v19 · 22.08.2026</div></div>
     <div class="f"><label>Показывать модули</label>${mods}</div>
     <div class="f"><label>Рабочие валюты — доступны при вводе сумм</label>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
@@ -2141,21 +2141,26 @@ function cloudInit(){
   catch(e){ setCloud('err','ошибка подключения'); }
 }
 /* вход по аккаунту Telegram — без логина и пароля */
+let LASTERR='';
 async function tgLogin(){
   const TGW=window.Telegram&&window.Telegram.WebApp;
-  if(!TGW||!TGW.initData)return false;
+  if(!TGW||!TGW.initData){LASTERR='программа открыта не из Telegram';return false;}
   try{
     setCloud('wait','вход через Telegram…');
     const r=await fetch(SUPA_URL+'/functions/v1/quick-action',{
       method:'POST',
       headers:{'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY},
       body:JSON.stringify({initData:TGW.initData})});
-    const j=await r.json();
-    if(!j.access_token)throw new Error(j.error||'нет токена');
-    await SB.auth.setSession({access_token:j.access_token,refresh_token:j.refresh_token});
-    ME=j.name||j.username||'Telegram';
+    let j={};
+    try{ j=await r.json(); }catch(e){ throw new Error('функция вернула не JSON, код '+r.status); }
+    if(!r.ok||!j.access_token)throw new Error((j.error||'нет токена')+' · код '+r.status);
+    const {error:se}=await SB.auth.setSession({access_token:j.access_token,refresh_token:j.refresh_token});
+    if(se)throw new Error('сессия: '+se.message);
+    const {data:{user},error:ue}=await SB.auth.getUser();
+    if(ue||!user)throw new Error('проверка входа: '+((ue&&ue.message)||'пользователь не найден'));
+    ME=j.name||j.username||'Telegram'; LASTERR='';
     return true;
-  }catch(e){ setCloud('err','вход не удался'); return false; }
+  }catch(e){ LASTERR=String(e.message||e); setCloud('err','вход не удался'); return false; }
 }
 function setCloud(st,msg){
   CLOUD.state=st;CLOUD.msg=msg;
@@ -2176,7 +2181,8 @@ async function cloudBoot(){
 async function cloudPull(silent){
   if(!SB)return;
   try{
-    const {data:{user}}=await SB.auth.getUser();
+    let {data:{user}}=await SB.auth.getUser();
+    if(!user){ if(await tgLogin()){ user=(await SB.auth.getUser()).data.user; } }
     if(!user){setCloud('err','нужен вход');return;}
     const {data,error}=await SB.from('finance_state').select('data,rev').eq('user_id',user.id).maybeSingle();
     if(error)throw error;
@@ -2222,7 +2228,11 @@ function cloudModal(){
       ${ME?`<div class="hint">вы вошли как ${ME}</div>`:''}</div>`
     + (inTG
       ? `<p class="hint" style="margin-bottom:12px">Вход выполняется автоматически по вашему аккаунту Telegram —
-          логин и пароль не нужны. Данные видны только вам.</p>`
+          логин и пароль не нужны. Данные видны только вам.</p>
+         ${LASTERR?`<div class="kpi" style="margin-bottom:12px;border-color:var(--out)">
+            <div class="l">Последняя ошибка</div><div class="hint" style="margin-top:4px">${LASTERR}</div></div>`:''}
+         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+           <button id="cTg" class="pri">Войти через Telegram</button></div>`
       : `<p class="hint" style="margin-bottom:12px">В браузере вход по почте и паролю.
           В Telegram программа входит сама по вашему аккаунту.</p>
          <div class="f2"><div class="f"><label>Почта</label><input id="ce" placeholder="you@mail.com"></div>
@@ -2236,6 +2246,10 @@ function cloudModal(){
         <button id="cPush">Отправить в облако</button></div>`;
   openModal('Облако',html,[{t:'Закрыть',f:closeModal}]);
   const st=m=>{const el=$('cState');if(el)el.textContent=m;};
+  if($('cTg'))$('cTg').onclick=async()=>{
+    const okTg=await tgLogin();
+    if(!okTg)return uiAlert('Не удалось войти. '+LASTERR);
+    await cloudPull(false); st(CLOUD.msg); uiAlert('Вход выполнен: '+ME);};
   if($('cSignUp'))$('cSignUp').onclick=async()=>{
     const {error}=await SB.auth.signUp({email:$('ce').value.trim(),password:$('cp').value});
     if(error)return uiAlert('Не вышло: '+error.message);
