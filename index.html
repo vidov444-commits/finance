@@ -314,7 +314,7 @@ html[data-theme="dark"] .pbig>span{text-shadow:0 1px 3px rgba(0,0,0,.6)}
 ::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:5px}
 ::-webkit-scrollbar-thumb:hover{background:var(--line3)}
 
-/* ================= МОБИЛЬНАЯ ВЁРСТКА (в конце, чтобы перекрывать основные правила) ================= */
+/* ===== МОБИЛЬНАЯ ВЁРСТКА (в конце, перекрывает основные правила) ===== */
 /* ---------- планшет ---------- */
 @media(max-width:1100px){ .grid{grid-template-columns:1fr 1fr} }
 
@@ -500,8 +500,8 @@ html[data-theme="dark"] .pbig>span{text-shadow:0 1px 3px rgba(0,0,0,.6)}
 
 <script>
 /* ================= ДАННЫЕ ================= */
-const DEMO=true;
-const KEY=DEMO?'pf_v4':'pf_v4_empty';
+const DEMO=false;
+const KEY='pf_app';
 const uid=()=>Math.random().toString(36).slice(2,9);
 const today=new Date();
 const ym=d=>d.toISOString().slice(0,7);
@@ -520,7 +520,7 @@ function seed(){
   const base={settings:{rate:79,lastAcc:'',lastCat:'',theme:'light',chart:'line'},modules:defMods(),tx:[],goals:[]};
   if(!DEMO)return {...base,
     sections:[1,2,3,4].map(i=>({id:'s'+i,name:'Секция '+i,cls:'s'+i})),
-    accounts:[],sources:[],debts:[],payments:[],catsExp:['Прочее'],catsInc:['Прочее']};
+    accounts:[],sources:[],debts:[],payments:[],catsExp:[...EXP],catsInc:[...INC]};
   const sections=[{id:'s1',name:'Трейдинг',cls:'s1'},{id:'s2',name:'Личное',cls:'s2'},
                   {id:'s3',name:'Прочее',cls:'s3'},{id:'s4',name:'Фонды',cls:'s4'}];
   const accounts=[
@@ -2053,7 +2053,7 @@ $('menu').onclick=()=>{
     <label for="m_${k}">${S.modules[k].title}</label></div>`).join('');
   openModal('Настройки',
    `<div class="kpi" style="margin-bottom:14px"><div class="l">Версия программы</div>
-      <div class="v" style="font-size:16px">v16 · 22.08.2026</div></div>
+      <div class="v" style="font-size:16px">v18 · 22.08.2026</div></div>
     <div class="f"><label>Показывать модули</label>${mods}</div>
     <div class="f"><label>Рабочие валюты — доступны при вводе сумм</label>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
@@ -2130,14 +2130,32 @@ async function fetchRates(silent){
 $('rateBtn').onclick=()=>fetchRates(false);
 if(S.settings.ratesDate!==iso(today))fetchRates(true);
 /* ================= ОБЛАКО (Supabase) ================= */
-const CK='pf_cloud';
-let CFG=JSON.parse(localStorage.getItem(CK)||'null')||{url:'',key:'',email:''};
-let SB=null, CLOUD={state:'off',msg:'выключено',at:null};
+/* доступы зашиты — вводить ничего не нужно */
+const SUPA_URL='https://oxxmlsnrouluikptpkgs.supabase.co';
+const SUPA_KEY='sb_publishable_fZiGLPLkA3FplsnLBFyxnA_zhNeFupY';
+let SB=null, CLOUD={state:'off',msg:'выключено',at:null}, ME=null;
 function cloudInit(){
-  if(!CFG.url||!CFG.key||!window.supabase){setCloud('off','выключено');return;}
-  try{ SB=window.supabase.createClient(CFG.url,CFG.key,{auth:{persistSession:true,autoRefreshToken:true}});
+  if(!window.supabase){setCloud('off','нет связи');return;}
+  try{ SB=window.supabase.createClient(SUPA_URL,SUPA_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
        setCloud('wait','подключение…'); cloudBoot(); }
-  catch(e){ setCloud('err','ошибка настроек'); }
+  catch(e){ setCloud('err','ошибка подключения'); }
+}
+/* вход по аккаунту Telegram — без логина и пароля */
+async function tgLogin(){
+  const TGW=window.Telegram&&window.Telegram.WebApp;
+  if(!TGW||!TGW.initData)return false;
+  try{
+    setCloud('wait','вход через Telegram…');
+    const r=await fetch(SUPA_URL+'/functions/v1/quick-action',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY},
+      body:JSON.stringify({initData:TGW.initData})});
+    const j=await r.json();
+    if(!j.access_token)throw new Error(j.error||'нет токена');
+    await SB.auth.setSession({access_token:j.access_token,refresh_token:j.refresh_token});
+    ME=j.name||j.username||'Telegram';
+    return true;
+  }catch(e){ setCloud('err','вход не удался'); return false; }
 }
 function setCloud(st,msg){
   CLOUD.state=st;CLOUD.msg=msg;
@@ -2148,7 +2166,10 @@ function setCloud(st,msg){
 }
 async function cloudBoot(){
   const {data:{session}}=await SB.auth.getSession();
-  if(!session){setCloud('err','нужен вход');return;}
+  if(!session){
+    const okTg=await tgLogin();
+    if(!okTg){setCloud('err','нужен вход');return;}
+  }
   await cloudPull(true);
 }
 /* забрать данные из облака */
@@ -2195,37 +2216,35 @@ async function cloudPush(now){
 }
 /* окно настройки облака */
 function cloudModal(){
-  const logged=!!(SB&&SB.auth);
-  const html=`<p class="hint" style="margin-bottom:12px">Облако синхронизирует данные между компьютером, телефоном и Telegram.
-      Настраивается один раз, дальше работает само.</p>
-    <div class="f"><label>Адрес проекта Supabase (Project URL)</label>
-      <input id="cu" value="${esc(CFG.url)}" placeholder="https://xxxx.supabase.co"></div>
-    <div class="f"><label>Публичный ключ (anon public)</label>
-      <input id="ck" value="${esc(CFG.key)}" placeholder="eyJhbGciOi..."></div>
-    <div class="f2">
-      <div class="f"><label>Почта</label><input id="ce" value="${esc(CFG.email)}" placeholder="you@mail.com"></div>
-      <div class="f"><label>Пароль</label><input id="cp" type="password" placeholder="минимум 6 символов"></div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-      <button id="cSignUp">Создать аккаунт</button>
-      <button id="cSignIn" class="pri">Войти</button>
-      <button id="cOut">Выйти</button></div>
-    <div class="kpi"><div class="l">Состояние</div><div class="v" id="cState" style="font-size:15px">${CLOUD.msg}</div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
-      <button id="cPull">Забрать из облака</button>
-      <button id="cPush">Отправить в облако</button></div>`;
+  const inTG=!!(window.Telegram&&window.Telegram.WebApp&&window.Telegram.WebApp.initData);
+  const html=`<div class="kpi" style="margin-bottom:14px"><div class="l">Состояние синхронизации</div>
+      <div class="v" id="cState" style="font-size:16px">${CLOUD.msg}</div>
+      ${ME?`<div class="hint">вы вошли как ${ME}</div>`:''}</div>`
+    + (inTG
+      ? `<p class="hint" style="margin-bottom:12px">Вход выполняется автоматически по вашему аккаунту Telegram —
+          логин и пароль не нужны. Данные видны только вам.</p>`
+      : `<p class="hint" style="margin-bottom:12px">В браузере вход по почте и паролю.
+          В Telegram программа входит сама по вашему аккаунту.</p>
+         <div class="f2"><div class="f"><label>Почта</label><input id="ce" placeholder="you@mail.com"></div>
+           <div class="f"><label>Пароль</label><input id="cp" type="password" placeholder="от 6 символов"></div></div>
+         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+           <button id="cSignUp">Создать аккаунт</button>
+           <button id="cSignIn" class="pri">Войти</button>
+           <button id="cOut">Выйти</button></div>`)
+    + `<div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button id="cPull">Забрать из облака</button>
+        <button id="cPush">Отправить в облако</button></div>`;
   openModal('Облако',html,[{t:'Закрыть',f:closeModal}]);
-  const saveCfg=()=>{CFG={url:$('cu').value.trim().replace(/\/$/,''),key:$('ck').value.trim(),email:$('ce').value.trim()};
-    localStorage.setItem(CK,JSON.stringify(CFG));cloudInit();};
-  const st=m=>{$('cState').textContent=m;};
-  $('cSignUp').onclick=async()=>{saveCfg();if(!SB)return uiAlert('Укажите адрес и ключ проекта');
+  const st=m=>{const el=$('cState');if(el)el.textContent=m;};
+  if($('cSignUp'))$('cSignUp').onclick=async()=>{
     const {error}=await SB.auth.signUp({email:$('ce').value.trim(),password:$('cp').value});
     if(error)return uiAlert('Не вышло: '+error.message);
-    st('аккаунт создан, войдите');uiAlert('Аккаунт создан. Теперь нажмите «Войти».');};
-  $('cSignIn').onclick=async()=>{saveCfg();if(!SB)return uiAlert('Укажите адрес и ключ проекта');
+    uiAlert('Аккаунт создан. Теперь нажмите «Войти».');};
+  if($('cSignIn'))$('cSignIn').onclick=async()=>{
     const {error}=await SB.auth.signInWithPassword({email:$('ce').value.trim(),password:$('cp').value});
     if(error)return uiAlert('Не вышло: '+error.message);
-    st('вход выполнен');await cloudPull(false);st(CLOUD.msg);};
-  $('cOut').onclick=async()=>{if(SB)await SB.auth.signOut();setCloud('off','выход выполнен');st('выход выполнен');};
+    ME=$('ce').value.trim(); await cloudPull(false); st(CLOUD.msg);};
+  if($('cOut'))$('cOut').onclick=async()=>{await SB.auth.signOut();ME=null;setCloud('off','выход выполнен');st('выход выполнен');};
   $('cPull').onclick=async()=>{await cloudPull(false);st(CLOUD.msg);};
   $('cPush').onclick=async()=>{await cloudPush(true);st(CLOUD.msg);uiAlert('Данные отправлены в облако.');};
 }
