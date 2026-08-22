@@ -314,7 +314,7 @@ html[data-theme="dark"] .pbig>span{text-shadow:0 1px 3px rgba(0,0,0,.6)}
 ::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:5px}
 ::-webkit-scrollbar-thumb:hover{background:var(--line3)}
 
-/* ===== МОБИЛЬНАЯ ВЁРСТКА (в конце, перекрывает основные правила) ===== */
+/* ===== МОБИЛЬНАЯ ВЁРСТКА (в конце, перекрывает основные) ===== */
 /* ---------- планшет ---------- */
 @media(max-width:1100px){ .grid{grid-template-columns:1fr 1fr} }
 
@@ -394,8 +394,6 @@ html[data-theme="dark"] .pbig>span{text-shadow:0 1px 3px rgba(0,0,0,.6)}
 }
 
 @media(max-width:430px){
-  .acts{grid-template-columns:repeat(3,1fr)}
-  .acts button{font-size:11.5px;padding:0 6px}
   .tot{grid-template-columns:repeat(2,1fr);gap:6px}
   .tot .v{font-size:14px!important}
   .card>.h b{font-size:11.5px}
@@ -520,7 +518,7 @@ function seed(){
   const base={settings:{rate:79,lastAcc:'',lastCat:'',theme:'light',chart:'line'},modules:defMods(),tx:[],goals:[]};
   if(!DEMO)return {...base,
     sections:[1,2,3,4].map(i=>({id:'s'+i,name:'Секция '+i,cls:'s'+i})),
-    accounts:[],sources:[],debts:[],payments:[],catsExp:['Прочее'],catsInc:['Прочее']};
+    accounts:[],sources:[],debts:[],payments:[],catsExp:[...EXP],catsInc:[...INC]};
   const sections=[{id:'s1',name:'Трейдинг',cls:'s1'},{id:'s2',name:'Личное',cls:'s2'},
                   {id:'s3',name:'Прочее',cls:'s3'},{id:'s4',name:'Фонды',cls:'s4'}];
   const accounts=[
@@ -547,7 +545,7 @@ function seed(){
 let S=JSON.parse(localStorage.getItem(KEY)||'null')||seed();
 if(!S.modules)S.modules=defMods();
 Object.keys(MODS).forEach(k=>{if(!S.modules[k])S.modules[k]={title:MODS[k],hidden:false};});
-delete S.modules.goal;                                   /* модуль убран из программы */
+delete S.modules.goal;
 S.payments=(S.payments||[]).filter(p=>p.kind!=='goal');
 if(S.layout)Object.keys(S.layout).forEach(c=>S.layout[c]=S.layout[c].filter(k=>k!=='goal'));
 S.payments.forEach(p=>{if(!p.done)p.done={};});
@@ -2055,8 +2053,10 @@ $('menu').onclick=()=>{
       <div class="v" style="font-size:16px">${iso(today).split('-').reverse().join('.')}
         <span class="hint">${TZNAME||'—'} · UTC${TZOFF}</span></div></div>
     <div class="kpi" style="margin-bottom:14px"><div class="l">Версия программы</div>
-      <div class="v" style="font-size:16px">v21 · 23.08.2026</div></div>
+      <div class="v" style="font-size:16px">v22 · 23.08.2026</div></div>
     <div class="f"><label>Показывать модули</label>${mods}</div>
+    <div class="f"><label>Названия модулей</label>
+      <button id="bReset" style="width:100%">Вернуть стандартные названия</button></div>
     <div class="f"><label>Рабочие валюты — доступны при вводе сумм</label>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
       ${Object.keys(CURS).map(c=>`<div class="chk">
@@ -2079,6 +2079,9 @@ $('mBody').addEventListener('click',e=>{
   if(e.target.id==='bExp'){const b=new Blob([JSON.stringify(S,null,1)],{type:'application/json'});
     const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='finance_'+MONTH+'.json';a.click();}
   if(e.target.id==='bImp')$('fileIn').click();
+  if(e.target.id==='bReset')uiConfirm('Вернуть стандартные названия всех модулей?',()=>{
+    Object.keys(MODS).forEach(k=>{if(S.modules[k])S.modules[k].title=MODS[k];});
+    save();render();closeModal();});
   if(e.target.id==='bCats')catsModal('out',()=>$('menu').click());
   if(e.target.id==='bAccs')accPickerModal(()=>$('menu').click());
   if(e.target.id==='bRst')uiConfirm('Удалить все данные и начать заново?',()=>{S=seed();save();render();closeModal();});
@@ -2086,7 +2089,7 @@ $('mBody').addEventListener('click',e=>{
 $('fileIn').onchange=e=>{const r=new FileReader();r.onload=()=>{try{S=JSON.parse(r.result);
   if(!S.modules)S.modules=defMods();
   Object.keys(MODS).forEach(k=>{if(!S.modules[k])S.modules[k]={title:MODS[k],hidden:false};});
-delete S.modules.goal;                                   /* модуль убран из программы */
+delete S.modules.goal;
 S.payments=(S.payments||[]).filter(p=>p.kind!=='goal');
 if(S.layout)Object.keys(S.layout).forEach(c=>S.layout[c]=S.layout[c].filter(k=>k!=='goal'));
   S.payments.forEach(p=>{if(!p.done)p.done={};});
@@ -2135,38 +2138,49 @@ async function fetchRates(silent){
 $('rateBtn').onclick=()=>fetchRates(false);
 if(S.settings.ratesDate!==iso(today))fetchRates(true);
 /* ================= ОБЛАКО (Supabase) ================= */
-/* доступы зашиты — вводить ничего не нужно */
 const SUPA_URL='https://oxxmlsnrouluikptpkgs.supabase.co';
 const SUPA_KEY='sb_publishable_fZiGLPLkA3FplsnLBFyxnA_zhNeFupY';
-let SB=null, CLOUD={state:'off',msg:'выключено',at:null}, ME=null;
+const FN=SUPA_URL+'/functions/v1/quick-action';
+const BOT_NAME='personalfinanceeee_bot';
+let SB=null, CLOUD={state:'off',msg:'выключено',at:null}, ME=null, LASTERR='';
 function cloudInit(){
   if(!window.supabase){setCloud('off','нет связи');return;}
   try{ SB=window.supabase.createClient(SUPA_URL,SUPA_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
        setCloud('wait','подключение…'); cloudBoot(); }
   catch(e){ setCloud('err','ошибка подключения'); }
 }
-/* вход по аккаунту Telegram — без логина и пароля */
-let LASTERR='';
+async function useTokens(j){
+  if(!j||!j.access_token)throw new Error((j&&j.error)||'нет токена');
+  const {error:se}=await SB.auth.setSession({access_token:j.access_token,refresh_token:j.refresh_token});
+  if(se)throw new Error('сессия: '+se.message);
+  const {data:{user},error:ue}=await SB.auth.getUser();
+  if(ue||!user)throw new Error('проверка входа: '+((ue&&ue.message)||'пользователь не найден'));
+  ME=j.name||j.username||'Telegram'; LASTERR='';
+}
 async function tgLogin(){
   const TGW=window.Telegram&&window.Telegram.WebApp;
-  if(!TGW||!TGW.initData){LASTERR='программа открыта не из Telegram';return false;}
+  if(!TGW||!TGW.initData){LASTERR='открыто не из Telegram';return false;}
   try{
     setCloud('wait','вход через Telegram…');
-    const r=await fetch(SUPA_URL+'/functions/v1/quick-action',{
-      method:'POST',
+    const r=await fetch(FN,{method:'POST',
       headers:{'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY},
       body:JSON.stringify({initData:TGW.initData})});
-    let j={};
-    try{ j=await r.json(); }catch(e){ throw new Error('функция вернула не JSON, код '+r.status); }
-    if(!r.ok||!j.access_token)throw new Error((j.error||'нет токена')+' · код '+r.status);
-    const {error:se}=await SB.auth.setSession({access_token:j.access_token,refresh_token:j.refresh_token});
-    if(se)throw new Error('сессия: '+se.message);
-    const {data:{user},error:ue}=await SB.auth.getUser();
-    if(ue||!user)throw new Error('проверка входа: '+((ue&&ue.message)||'пользователь не найден'));
-    ME=j.name||j.username||'Telegram'; LASTERR='';
-    return true;
+    let j={}; try{ j=await r.json(); }catch(e){ throw new Error('ответ не JSON, код '+r.status); }
+    if(!r.ok)throw new Error((j.error||'ошибка')+' · код '+r.status);
+    await useTokens(j); return true;
   }catch(e){ LASTERR=String(e.message||e); setCloud('err','вход не удался'); return false; }
 }
+window.onTelegramAuth=async function(user){
+  try{
+    setCloud('wait','вход через Telegram…');
+    const r=await fetch(FN,{method:'POST',
+      headers:{'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY},
+      body:JSON.stringify({widget:user})});
+    const j=await r.json();
+    if(!r.ok)throw new Error((j.error||'ошибка')+' · код '+r.status);
+    await useTokens(j); await cloudPull(false); uiAlert('Вход выполнен: '+ME);
+  }catch(e){ LASTERR=String(e.message||e); setCloud('err','вход не удался'); uiAlert('Не удалось войти. '+LASTERR); }
+};
 function setCloud(st,msg){
   CLOUD.state=st;CLOUD.msg=msg;
   const b=$('cloudBtn'); if(!b)return;
@@ -2176,10 +2190,7 @@ function setCloud(st,msg){
 }
 async function cloudBoot(){
   const {data:{session}}=await SB.auth.getSession();
-  if(!session){
-    const okTg=await tgLogin();
-    if(!okTg){setCloud('err','нужен вход');return;}
-  }
+  if(!session){ if(!await tgLogin()){setCloud('err','нужен вход');return;} }
   await cloudPull(true);
 }
 /* забрать данные из облака */
@@ -2228,32 +2239,37 @@ async function cloudPush(now){
 /* окно настройки облака */
 function cloudModal(){
   const inTG=!!(window.Telegram&&window.Telegram.WebApp&&window.Telegram.WebApp.initData);
+  const err=LASTERR?`<div class="kpi" style="margin-bottom:12px;border-color:var(--out)">
+      <div class="l">Последняя ошибка</div><div class="hint" style="margin-top:4px">${LASTERR}</div></div>`:'';
   const html=`<div class="kpi" style="margin-bottom:14px"><div class="l">Состояние синхронизации</div>
       <div class="v" id="cState" style="font-size:16px">${CLOUD.msg}</div>
-      ${ME?`<div class="hint">вы вошли как ${ME}</div>`:''}</div>`
+      ${ME?`<div class="hint">вы вошли как ${ME}</div>`:''}</div>`+err
     + (inTG
-      ? `<p class="hint" style="margin-bottom:12px">Вход выполняется автоматически по вашему аккаунту Telegram —
-          логин и пароль не нужны. Данные видны только вам.</p>
-         ${LASTERR?`<div class="kpi" style="margin-bottom:12px;border-color:var(--out)">
-            <div class="l">Последняя ошибка</div><div class="hint" style="margin-top:4px">${LASTERR}</div></div>`:''}
-         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-           <button id="cTg" class="pri">Войти через Telegram</button></div>`
-      : `<p class="hint" style="margin-bottom:12px">В браузере вход по почте и паролю.
-          В Telegram программа входит сама по вашему аккаунту.</p>
-         <div class="f2"><div class="f"><label>Почта</label><input id="ce" placeholder="you@mail.com"></div>
-           <div class="f"><label>Пароль</label><input id="cp" type="password" placeholder="от 6 символов"></div></div>
-         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-           <button id="cSignUp">Создать аккаунт</button>
-           <button id="cSignIn" class="pri">Войти</button>
-           <button id="cOut">Выйти</button></div>`)
+      ? `<p class="hint" style="margin-bottom:12px">Вход выполняется сам по вашему аккаунту Telegram.</p>
+         <div style="margin-bottom:12px"><button id="cTg" class="pri" style="width:100%">Войти через Telegram</button></div>`
+      : `<p class="hint" style="margin-bottom:12px">Войдите через Telegram — данные будут те же, что в мини-аппе.</p>
+         <div class="f"><div id="tgw"></div></div>
+         <details style="margin-bottom:12px"><summary class="hint" style="cursor:pointer">Вход по почте — отдельный аккаунт</summary>
+           <div class="f2" style="margin-top:10px"><div class="f"><label>Почта</label><input id="ce" placeholder="you@mail.com"></div>
+             <div class="f"><label>Пароль</label><input id="cp" type="password" placeholder="от 6 символов"></div></div>
+           <div style="display:flex;gap:8px;flex-wrap:wrap">
+             <button id="cSignUp">Создать аккаунт</button><button id="cSignIn" class="pri">Войти</button>
+             <button id="cOut">Выйти</button></div></details>`)
     + `<div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button id="cPull">Забрать из облака</button>
-        <button id="cPush">Отправить в облако</button></div>`;
+        <button id="cPull">Забрать из облака</button><button id="cPush">Отправить в облако</button></div>`;
   openModal('Облако',html,[{t:'Закрыть',f:closeModal}]);
   const st=m=>{const el=$('cState');if(el)el.textContent=m;};
+  if($('tgw')){
+    const sc=document.createElement('script');
+    sc.async=true; sc.src='https://telegram.org/js/telegram-widget.js?22';
+    sc.setAttribute('data-telegram-login',BOT_NAME);
+    sc.setAttribute('data-size','large');
+    sc.setAttribute('data-userpic','false');
+    sc.setAttribute('data-onauth','onTelegramAuth(user)');
+    $('tgw').appendChild(sc);
+  }
   if($('cTg'))$('cTg').onclick=async()=>{
-    const okTg=await tgLogin();
-    if(!okTg)return uiAlert('Не удалось войти. '+LASTERR);
+    if(!await tgLogin())return uiAlert('Не удалось войти. '+LASTERR);
     await cloudPull(false); st(CLOUD.msg); uiAlert('Вход выполнен: '+ME);};
   if($('cSignUp'))$('cSignUp').onclick=async()=>{
     const {error}=await SB.auth.signUp({email:$('ce').value.trim(),password:$('cp').value});
