@@ -330,10 +330,9 @@ html[data-theme="dark"] .pbig>span{text-shadow:0 1px 3px rgba(0,0,0,.6)}
   #month{width:auto;flex:1 1 auto;min-width:104px;height:36px;font-size:13px}
   .rate{height:36px}
   #theme,#cloudBtn{height:36px;padding:0 10px}
-  .acts{order:3;width:100%;margin:0;gap:6px;overflow-x:auto;padding-bottom:2px;
-        scrollbar-width:none;-ms-overflow-style:none}
-  .acts::-webkit-scrollbar{display:none}
-  .acts button{height:38px;padding:0 14px;font-size:13.5px;flex:0 0 auto;border-radius:11px}
+  .acts{order:3;width:100%;margin:0;gap:6px;display:grid;grid-template-columns:repeat(3,1fr);overflow:visible}
+  .acts button{height:38px;padding:0 8px;font-size:12.5px;border-radius:11px;white-space:nowrap;
+               overflow:hidden;text-overflow:ellipsis}
   .tot{order:2;width:100%;display:grid;grid-template-columns:repeat(4,1fr);gap:4px;
        border:none;border-top:1px solid var(--line);padding:7px 0 0;margin-top:2px;
        background:transparent;box-shadow:none;border-radius:0}
@@ -395,6 +394,8 @@ html[data-theme="dark"] .pbig>span{text-shadow:0 1px 3px rgba(0,0,0,.6)}
 }
 
 @media(max-width:430px){
+  .acts{grid-template-columns:repeat(3,1fr)}
+  .acts button{font-size:11.5px;padding:0 6px}
   .tot{grid-template-columns:repeat(2,1fr);gap:6px}
   .tot .v{font-size:14px!important}
   .card>.h b{font-size:11.5px}
@@ -465,11 +466,6 @@ html[data-theme="dark"] .pbig>span{text-shadow:0 1px 3px rgba(0,0,0,.6)}
         <button class="addPay" data-kind="per">+</button><button class="gh" data-modx="per" title="убрать модуль">✕</button></div>
       <div class="b" id="payPer"></div><div class="f" id="payPerF"></div>
     </div>
-    <div class="card" data-card="goal">
-      <div class="h"><span class="grip2">⠿</span><b data-mod="goal"></b><span class="spacer"></span>
-        <button class="addPay" data-kind="goal">+</button><button class="gh" data-modx="goal" title="убрать модуль">✕</button></div>
-      <div class="b" id="payGoal"></div><div class="f" id="payGoalF"></div>
-    </div>
     <div class="card" data-card="plan">
       <div class="h"><span class="grip2">⠿</span><b data-mod="plan"></b><span class="spacer"></span>
         <button id="addPlan">+ План на день</button>
@@ -504,12 +500,16 @@ const DEMO=false;
 const KEY='pf_app';
 const uid=()=>Math.random().toString(36).slice(2,9);
 const today=new Date();
-const ym=d=>d.toISOString().slice(0,7);
-const iso=d=>d.toISOString().slice(0,10);
+const p2=n=>String(n).padStart(2,'0');
+const ym=d=>{const t=new Date(d);return t.getFullYear()+'-'+p2(t.getMonth()+1);};
+const iso=d=>{const t=new Date(d);return t.getFullYear()+'-'+p2(t.getMonth()+1)+'-'+p2(t.getDate());};
+const TZNAME=(()=>{try{return Intl.DateTimeFormat().resolvedOptions().timeZone||'';}catch(e){return '';}})();
+const TZOFF=(()=>{const m=-new Date().getTimezoneOffset();
+  return (m>=0?'+':'−')+p2(Math.floor(Math.abs(m)/60))+(Math.abs(m)%60?':'+p2(Math.abs(m)%60):'');})();
 const MN=['январь','февраль','март','апрель','май','июнь','июль','август','сентябрь','октябрь','ноябрь','декабрь'];
 const MODS={days:'Доходы / расходы',flow:'Кэшфлоу · источники дохода',bal:'Общий баланс',
             biz:'Месячные платежи бизнес',per:'Месячные платежи личные',
-            goal:'Месячные цели и задачи',debt:'Долги',plan:'Планер'};
+            debt:'Долги',plan:'Планер'};
 const defMods=()=>Object.fromEntries(Object.entries(MODS).map(([k,v])=>[k,{title:v,hidden:false}]));
 const EXP=['Продукты','Кафе и рестораны','Алкоголь','Транспорт','Такси','Жильё','Дети','Жена','Связь',
   'Подписки и сервисы','Здоровье','Красота','Одежда','Спорт','Развлечения','Подарки','Ремонт','Питомцы',
@@ -547,6 +547,9 @@ function seed(){
 let S=JSON.parse(localStorage.getItem(KEY)||'null')||seed();
 if(!S.modules)S.modules=defMods();
 Object.keys(MODS).forEach(k=>{if(!S.modules[k])S.modules[k]={title:MODS[k],hidden:false};});
+delete S.modules.goal;                                   /* модуль убран из программы */
+S.payments=(S.payments||[]).filter(p=>p.kind!=='goal');
+if(S.layout)Object.keys(S.layout).forEach(c=>S.layout[c]=S.layout[c].filter(k=>k!=='goal'));
 S.payments.forEach(p=>{if(!p.done)p.done={};});
 if(!S.settings.theme)S.settings.theme='light';
 if(!S.goals)S.goals=[];
@@ -1457,7 +1460,7 @@ function calModal(){
         <div class="plist">${pays.map(p=>`<div class="pr" style="${isDoneM(p,mk)?'opacity:.5':''}">
           <div class="ck2 ${isDoneM(p,mk)?'on':''}" data-calpay="${p.id}|${mk}">✓</div>
           <span class="n">${isDoneM(p,mk)?'<s>'+p.name+'</s>':p.name}
-            <span class="hint">${p.kind==='biz'?'бизнес':p.kind==='goal'?'цель месяца':'личный платёж'}</span></span>
+            <span class="hint">${p.kind==='biz'?'бизнес':'личный платёж'}</span></span>
           <b class="${isDoneM(p,mk)?'in':''}">${f(p.amount)} ${p.cur==='USD'?'$':'₽'}</b></div>`).join('')}</div>`:''}`;
   }else if(CALV==='w'){
     const dow=(new Date(CALD).getDay()+6)%7;
@@ -1565,7 +1568,7 @@ function newTaskFor(ds){
 /* ================= ОТРИСОВКА ================= */
 function applyTheme(){document.documentElement.dataset.theme=S.settings.theme;
   $('theme').textContent=S.settings.theme==='dark'?'☀':'☾';}
-const defLayout=()=>({c0:['flow','bal'],c1:['days'],c2:['plan','biz','per','goal','debt']});
+const defLayout=()=>({c0:['flow','bal'],c1:['days'],c2:['plan','biz','per','debt']});
 function applyLayout(){
   const L=S.layout||defLayout();
   const cols=[...document.querySelectorAll('.grid > .col')];
@@ -1771,17 +1774,14 @@ function payRow(p){
     <div class="ck" data-ck="${p.id}" title="отметить как закрытое">✓</div></div>`;
 }
 function rPays(){
-  [['biz','payBiz'],['per','payPer'],['goal','payGoal']].forEach(([kind,el])=>{
+  [['biz','payBiz'],['per','payPer']].forEach(([kind,el])=>{
     const list=S.payments.filter(p=>p.kind===kind).sort((a,b)=>a.day-b.day);
     const all=list.reduce((s,p)=>s+toRub(p.amount,p.cur),0);
     const done=list.filter(p=>isDone(p)).length;
     const left=list.filter(p=>!isDone(p)).reduce((s,p)=>s+toRub(p.amount,p.cur),0);
     $(el).innerHTML=list.length?list.map(payRow).join('')
-      :`<div class="empty" data-empty="${kind}">Нажмите здесь или + и добавьте ${kind==='goal'?'цель или задачу':'платёж'}</div>`;
-    $(el+'F').innerHTML=kind==='goal'
-      ? `<span class="hint">всего ${f(all)} ₽ · ${done} из ${list.length}</span>
-         <span>осталось <span class="${left?'out':'in'}">${f(left)} ₽</span></span>`
-      : `<span class="hint">всего ${f(all)} ₽</span>
+      :`<div class="empty" data-empty="${kind}">Нажмите здесь или + и добавьте платёж</div>`;
+    $(el+'F').innerHTML=`<span class="hint">всего ${f(all)} ₽</span>
          <span>осталось <span class="${left?'out':'in'}">${f(left)} ₽</span></span>`;
   });
 }
@@ -1999,9 +1999,9 @@ document.querySelector('.grid').onclick=e=>{
   const d=e.target.closest('[data-d]'); if(d)return entryModal(d.dataset.d,'out');
   const pr=e.target.closest('[data-pay]');
   if(pr){const p=S.payments.find(x=>x.id===pr.dataset.pay);
-    return simpleModal(p.kind==='goal'?'Цель / задача':'Платёж',
+    return simpleModal('Платёж',
       [{k:'name',l:'Название'},{k:'day',l:'День месяца (1–31)',t:'number',min:1,max:31},
-       {k:'amount',l:p.kind==='goal'?'Сумма (можно 0)':'Сумма',t:'number'},
+       {k:'amount',l:'Сумма',t:'number'},
        {k:'cur',l:'Валюта',t:'select',o:curList()}],p,()=>{},
       ()=>S.payments=S.payments.filter(x=>x.id!==p.id));}
   const dbt=e.target.closest('[data-debt]');
@@ -2041,19 +2041,21 @@ $('addDebt').onclick=()=>simpleModal('Новый долг',[{k:'name',l:'Ком�
   {id:uid(),name:'',amount:0},o=>S.debts.push(o));
 $('addSrc').onclick=()=>simpleModal('Новый источник',[{k:'name',l:'Название'},{k:'plan',l:'План, $',t:'number'}],
   {id:uid(),name:'',plan:0},o=>S.sources.push(o));
-document.querySelectorAll('.addPay').forEach(b=>b.onclick=()=>{
-  const g=b.dataset.kind==='goal';
-  simpleModal(g?'Новая цель или задача':'Новый платёж',
+document.querySelectorAll('.addPay').forEach(b=>b.onclick=()=>
+  simpleModal('Новый платёж',
     [{k:'name',l:'Название'},{k:'day',l:'День месяца (1–31)',t:'number',min:1,max:31},
-     {k:'amount',l:g?'Сумма (можно 0)':'Сумма',t:'number'},{k:'cur',l:'Валюта',t:'select',o:curList()}],
-    {id:uid(),name:'',day:1,amount:0,cur:'RUB',kind:b.dataset.kind,done:{}},o=>S.payments.push(o));});
+     {k:'amount',l:'Сумма',t:'number'},{k:'cur',l:'Валюта',t:'select',o:curList()}],
+    {id:uid(),name:'',day:1,amount:0,cur:'RUB',kind:b.dataset.kind,done:{}},o=>S.payments.push(o)));
 $('menu').onclick=()=>{
   const mods=Object.keys(MODS).map(k=>`<div class="chk" style="margin-bottom:8px">
     <input type="checkbox" id="m_${k}" ${S.modules[k].hidden?'':'checked'}>
     <label for="m_${k}">${S.modules[k].title}</label></div>`).join('');
   openModal('Настройки',
-   `<div class="kpi" style="margin-bottom:14px"><div class="l">Версия программы</div>
-      <div class="v" style="font-size:16px">v19 · 22.08.2026</div></div>
+   `<div class="kpi" style="margin-bottom:10px"><div class="l">Сегодня · часовой пояс устройства</div>
+      <div class="v" style="font-size:16px">${iso(today).split('-').reverse().join('.')}
+        <span class="hint">${TZNAME||'—'} · UTC${TZOFF}</span></div></div>
+    <div class="kpi" style="margin-bottom:14px"><div class="l">Версия программы</div>
+      <div class="v" style="font-size:16px">v21 · 23.08.2026</div></div>
     <div class="f"><label>Показывать модули</label>${mods}</div>
     <div class="f"><label>Рабочие валюты — доступны при вводе сумм</label>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
@@ -2084,6 +2086,9 @@ $('mBody').addEventListener('click',e=>{
 $('fileIn').onchange=e=>{const r=new FileReader();r.onload=()=>{try{S=JSON.parse(r.result);
   if(!S.modules)S.modules=defMods();
   Object.keys(MODS).forEach(k=>{if(!S.modules[k])S.modules[k]={title:MODS[k],hidden:false};});
+delete S.modules.goal;                                   /* модуль убран из программы */
+S.payments=(S.payments||[]).filter(p=>p.kind!=='goal');
+if(S.layout)Object.keys(S.layout).forEach(c=>S.layout[c]=S.layout[c].filter(k=>k!=='goal'));
   S.payments.forEach(p=>{if(!p.done)p.done={};});
   if(!S.settings.theme)S.settings.theme='light';
   if(!S.goals)S.goals=[];
