@@ -2326,5 +2326,76 @@ function initTG(){
 $('cloudBtn').onclick=cloudModal;
 render();initDnD();initAccDnD();initPlanDnD();initTG();cloudInit();
 </script>
+<script>
+/* merge-sync v1 — слияние состояний вместо перезаписи */
+(function(){
+  var TXSEEN=new Set(), T=null;
+  function seen(){ try{ TXSEEN=new Set((S.tx||[]).map(function(t){return t.id;})); }catch(e){} }
+  function track(){ try{
+    var now=new Set((S.tx||[]).map(function(t){return t.id;}));
+    if(!Array.isArray(S.del))S.del=[];
+    TXSEEN.forEach(function(id){ if(!now.has(id)&&S.del.indexOf(id)<0)S.del.push(id); });
+    if(S.del.length>800)S.del=S.del.slice(-800);
+    TXSEEN=now;
+  }catch(e){} }
+  function merge(loc,rem){
+    var l=+((loc&&loc.rev)||0), r=+((rem&&rem.rev)||0);
+    var nw=r>l?rem:loc, od=r>l?loc:rem;
+    var out=JSON.parse(JSON.stringify(nw));
+    var del=Array.from(new Set([].concat((loc&&loc.del)||[],(rem&&rem.del)||[])));
+    var m=new Map();
+    ((od&&od.tx)||[]).forEach(function(t){ if(t&&t.id)m.set(t.id,t); });
+    ((nw&&nw.tx)||[]).forEach(function(t){ if(t&&t.id)m.set(t.id,t); });
+    out.tx=Array.from(m.values()).filter(function(t){ return del.indexOf(t.id)<0; });
+    out.del=del.slice(-800); out.rev=Math.max(l,r);
+    return out;
+  }
+  cloudPull=async function(silent){
+    if(!SB)return;
+    try{
+      var u=(await SB.auth.getUser()).data.user;
+      if(!u&&typeof tgLogin==='function'&&await tgLogin()) u=(await SB.auth.getUser()).data.user;
+      if(!u){ setCloud('err','нужен вход'); return; }
+      var q=await SB.from('finance_state').select('data,rev').eq('user_id',u.id).maybeSingle();
+      if(q.error)throw q.error;
+      if(q.data&&q.data.data){
+        var rem=Object.assign({},q.data.data,{rev:+q.data.rev||+(q.data.data.rev||0)});
+        var b=JSON.stringify(S);
+        S=merge(S,rem); if(!S.plan)S.plan=[]; if(!S.goals)S.goals=[];
+        localStorage.setItem(KEY,JSON.stringify(S)); seen();
+        if(JSON.stringify(S)!==b){ render(); if(!silent)uiAlert('Загружены данные из облака.'); }
+      }
+      await cloudPush(true);
+      setCloud('ok','синхронизировано'); CLOUD.at=new Date();
+    }catch(e){ setCloud('err','нет связи'); }
+  };
+  cloudPush=async function(now){
+    if(!SB)return;
+    clearTimeout(T);
+    var run=async function(){
+      try{
+        var u=(await SB.auth.getUser()).data.user;
+        if(!u){ setCloud('err','нужен вход'); return; }
+        track();
+        var q=await SB.from('finance_state').select('data,rev').eq('user_id',u.id).maybeSingle();
+        if(q&&q.data&&q.data.data){
+          var rem=Object.assign({},q.data.data,{rev:+q.data.rev||+(q.data.data.rev||0)});
+          var n0=(S.tx||[]).length;
+          S=merge(S,rem); seen();
+          if((S.tx||[]).length!==n0) render();
+        }
+        S.rev=Date.now();
+        localStorage.setItem(KEY,JSON.stringify(S));
+        var w=await SB.from('finance_state').upsert({user_id:u.id,data:S,rev:S.rev},{onConflict:'user_id'});
+        if(w.error)throw w.error;
+        CLOUD.at=new Date(); setCloud('ok','синхронизировано '+new Date().toLocaleTimeString('ru-RU').slice(0,5));
+      }catch(e){ setCloud('err','не отправлено'); }
+    };
+    if(now)return run();
+    T=setTimeout(run,1500);
+  };
+  seen();
+})();
+</script>
 </body>
 </html>
