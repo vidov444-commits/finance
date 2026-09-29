@@ -2396,6 +2396,113 @@ render();initDnD();initAccDnD();initPlanDnD();initTG();cloudInit();
   };
   seen();
 })();
+</script><!--
+  КУДА: в index.html, в самый конец — после блока merge-sync, перед </body>.
+  Блок ничего не удаляет. Откат — удалить блок целиком.
+  goal-monthly v2 · 2026-09-29
+-->
+<script>
+/* goal-monthly v2 — прогресс цели считается из доходов за текущий месяц,
+   а в карточке цели вместо «Взносов» показываются сами поступления,
+   по клику открывается окно «Операция» (изменить / удалить). */
+(function(){
+  if (typeof goalStat !== 'function') return;
+
+  var esc = function(s){ return String(s==null?'':s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); };
+  var ym = function(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); };
+
+  function incomes(){
+    try { return (S.tx||[]).filter(function(t){ return t && t.type === 'in'; }); }
+    catch(e){ return []; }
+  }
+  function sumFor(g, ymk){
+    return incomes().filter(function(t){ return String(t.date).slice(0,7) === ymk; })
+      .reduce(function(s,t){ return s + cAmt(g, {amount:t.amount, cur:t.cur||'RUB'}); }, 0);
+  }
+
+  /* ---------- 1. полоса прогресса ---------- */
+  goalStat = function(g){
+    var ps = periodsOf(g);
+    var d = new Date(today);
+    var dim = new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
+    var dayN = d.getDate();
+    var target = Number(g.target) || 0;          // теперь это план на МЕСЯЦ
+    var fact = sumFor(g, ym(d));
+
+    var planNow  = target * (dayN / dim);
+    var left     = Math.max(0, target - fact);
+    var daysLeft = dim - dayN;
+    var daysGone = Math.max(1, dayN);
+    var perDay   = fact / daysGone;
+    var needDay  = daysLeft > 0 ? left / daysLeft : 0;
+
+    var etaDays = perDay > 0 ? Math.ceil(left / perDay) : null;
+    var eta = etaDays != null ? new Date(today.getTime() + etaDays * 864e5) : null;
+    var endOfMonth = new Date(d.getFullYear(), d.getMonth(), dim);
+    var etaDelta = eta ? Math.ceil((eta - endOfMonth) / 864e5) : null;
+
+    var streak = 0;
+    for (var k = 1; k <= 36; k++){
+      var p = new Date(d.getFullYear(), d.getMonth() - k, 1);
+      if (target > 0 && sumFor(g, ym(p)) >= target - 0.5) streak++; else break;
+    }
+
+    return { ps: ps, planNow: planNow, fact: fact, left: left, ahead: 1,
+      daysLeft: daysLeft, daysGone: daysGone, perDay: perDay, needDay: needDay,
+      eta: eta, etaDelta: etaDelta, streak: streak,
+      need: left, delta: fact - planNow,
+      eff: planNow > 0 ? fact / planNow * 100 : (fact ? 100 : 0),
+      pct: target ? Math.min(100, fact / target * 100) : 0,
+      planPct: target ? Math.min(100, planNow / target * 100) : 0 };
+  };
+
+  /* ---------- 2. список поступлений в карточке цели ---------- */
+  if (typeof goalModal === 'function'){
+    var orig = goalModal;
+    goalModal = function(g){
+      orig(g);
+      try { swap(g); } catch(e){}
+    };
+  }
+
+  function swap(g){
+    var mb = document.getElementById('mBody'); if (!mb) return;
+    var lab = null, ls = mb.querySelectorAll('label');
+    for (var i = ls.length - 1; i >= 0; i--)
+      if (/^Взносы/.test(ls[i].textContent.trim())) { lab = ls[i]; break; }
+    if (!lab) return;
+
+    var k = ym(new Date(today));
+    var list = incomes().filter(function(t){ return String(t.date).slice(0,7) === k; })
+      .sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); });
+
+    lab.textContent = 'Поступления за месяц (' + list.length + ') — клик, чтобы изменить или удалить';
+
+    var html = list.length
+      ? '<div class="plist">' + list.map(function(t){
+          return '<div class="pr" data-gtx="' + esc(t.id) + '" style="cursor:pointer">' +
+            '<span class="n">' + String(t.date).split('-').reverse().join('.') +
+            '<span class="hint"> · ' + esc(t.category||'') + (t.note ? ' · ' + esc(t.note) : '') + '</span></span>' +
+            '<b class="in">+' + f(txRub(t)) + ' ₽</b></div>';
+        }).join('') + '</div>'
+      : '<div class="empty">За этот месяц поступлений ещё нет</div>';
+
+    var box = lab.nextElementSibling;
+    if (box) { box.insertAdjacentHTML('afterend', html); box.remove(); }
+    else lab.insertAdjacentHTML('afterend', html);
+
+    var node = lab.nextElementSibling;
+    if (node) node.onclick = function(e){
+      var r = e.target.closest('[data-gtx]'); if (!r) return;
+      var t = (S.tx||[]).find(function(x){ return x.id === r.dataset.gtx; });
+      if (t) txModal(t, function(){ goalModal(g); });
+    };
+  }
+
+  try { if (typeof render === 'function') render(); } catch(e){}
+})();
 </script>
+
 </body>
 </html>
