@@ -2507,13 +2507,13 @@ render();initDnD();initAccDnD();initPlanDnD();initTG();cloudInit();
 <!--
   КУДА: в index.html, в самый конец — после блока goal-monthly v2, перед </body>.
   Блок ничего не удаляет. Откат — удалить блок целиком.
-  goal-period v3.3 · 2026-11-14
+  goal-period v3.4 · 2026-11-14
 -->
 <script>
-/* goal-period v3.3 — цель всегда с 15-го по 15-е следующего месяца (день зарплаты).
+/* goal-period v3.4 — цель всегда с 15-го по 15-е следующего месяца (день зарплаты).
    Старт и дедлайн цели сами выравниваются на 15-е и после дедлайна переходят на следующий период.
    Везде одни и те же даты: полоса, карточка цели, сетка, настройки.
-   Цвет полосы от красного через жёлтый к зелёному по мере достижения цели. */
+   Цвет полосы — три цвета программы: до 33% цели красный, 33–66% жёлтый, от 67% зелёный. */
 (function(){
   if (typeof goalStat !== 'function') return;
   var DAY = 15, MS = 864e5;
@@ -2617,8 +2617,8 @@ render();initDnD();initAccDnD();initPlanDnD();initTG();cloudInit();
         var strip = document.getElementById('gstrip');
         var bar = strip && strip.querySelector('.pbig'); if (!bar || !g) return;
         var nm = strip.querySelector('.gs-n'); if (nm) nm.remove();          // без «★ Цель»
-        var pct = goalStat(g).pct;                                          // 0 → красный, 50 → жёлтый, 100 → зелёный
-        var col = 'hsl(' + Math.round(120 * Math.max(0, Math.min(100, pct)) / 100) + ',78%,47%)';
+        var pct = goalStat(g).pct;                                          // до 33% красный, 33–66% жёлтый, от 67% зелёный
+        var col = pct < 33 ? 'var(--out)' : pct < 67 ? 'var(--warn)' : 'var(--in)';
         var fill = bar.querySelector('i'), mark = bar.querySelector('u');
         if (fill) fill.style.background = col;
         if (mark) mark.style.background = col;
