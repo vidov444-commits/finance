@@ -2507,10 +2507,10 @@ render();initDnD();initAccDnD();initPlanDnD();initTG();cloudInit();
 <!--
   КУДА: в index.html, в самый конец — после блока goal-monthly v2, перед </body>.
   Блок ничего не удаляет. Откат — удалить блок целиком.
-  goal-period v3.4 · 2026-11-14
+  goal-period v3.5 · 2026-11-14
 -->
 <script>
-/* goal-period v3.4 — цель всегда с 15-го по 15-е следующего месяца (день зарплаты).
+/* goal-period v3.5 — цель всегда с 15-го по 15-е следующего месяца (день зарплаты).
    Старт и дедлайн цели сами выравниваются на 15-е и после дедлайна переходят на следующий период.
    Везде одни и те же даты: полоса, карточка цели, сетка, настройки.
    Цвет полосы — три цвета программы: до 33% цели красный, 33–66% жёлтый, от 67% зелёный. */
@@ -2605,7 +2605,8 @@ render();initDnD();initAccDnD();initPlanDnD();initTG();cloudInit();
   css.textContent =
     '#gstrip .pbig>small.gp-d{position:absolute;top:50%;transform:translateY(-50%);font-size:10px;' +
     'font-weight:600;opacity:.8;pointer-events:none;text-shadow:0 1px 3px rgba(0,0,0,.6);z-index:2}' +
-    '#gstrip .pbig>small.gp-a{left:9px}#gstrip .pbig>small.gp-b{right:9px}';
+    '#gstrip .pbig>small.gp-a{left:9px}#gstrip .pbig>small.gp-b{right:9px}' +
+    '#gstrip .pbig>i{opacity:.45}';                 // заливка приглушённая — текст на полосе читается
   document.head.appendChild(css);
 
   if (typeof rStrip === 'function'){
