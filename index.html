@@ -2504,5 +2504,153 @@ render();initDnD();initAccDnD();initPlanDnD();initTG();cloudInit();
 })();
 </script>
 
+<!--
+  КУДА: в index.html, в самый конец — после блока goal-monthly v2, перед </body>.
+  Блок ничего не удаляет. Откат — удалить блок целиком.
+  goal-period v3.2 · 2026-11-14
+-->
+<script>
+/* goal-period v3.2 — цель считается с 15-го по 15-е (день зарплаты).
+   По краям полосы — даты периода; цвет полосы от красного через жёлтый к зелёному по мере достижения цели. */
+(function(){
+  if (typeof goalStat !== 'function') return;
+  var DAY = 15, MS = 864e5;
+
+  var esc = function(s){ return String(s==null?'':s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); };
+  var iso = function(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+  var MON = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
+  var dm  = function(d){ return d.getDate() + ' ' + MON[d.getMonth()]; };
+
+  // период, в который попадает дата: [15-е, 15-е следующего месяца)
+  function periodAt(d){
+    var y = d.getFullYear(), m = d.getMonth();
+    if (d.getDate() < DAY) m -= 1;
+    return { from: new Date(y, m, DAY), to: new Date(y, m + 1, DAY) };
+  }
+  function shift(p, k){
+    return { from: new Date(p.from.getFullYear(), p.from.getMonth() + k, DAY),
+             to:   new Date(p.from.getFullYear(), p.from.getMonth() + k + 1, DAY) };
+  }
+  function incomesIn(p){
+    var a = iso(p.from), b = iso(p.to);
+    try { return (S.tx||[]).filter(function(t){ return t && t.type === 'in' && t.date >= a && t.date < b; }); }
+    catch(e){ return []; }
+  }
+  function sumIn(g, p){
+    return incomesIn(p).reduce(function(s,t){ return s + cAmt(g, {amount:t.amount, cur:t.cur||'RUB'}); }, 0);
+  }
+  window.goalPeriod = function(){ return periodAt(new Date(today)); };
+
+  /* ---------- 1. расчёт полосы ---------- */
+  goalStat = function(g){
+    var ps = periodsOf(g);
+    var now = new Date(today); now = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var p = periodAt(now);
+    var total    = Math.round((p.to - p.from) / MS);
+    var gone     = Math.round((now - p.from) / MS) + 1;
+    var daysLeft = Math.round((p.to - now) / MS);
+    var target   = Number(g.target) || 0;                       // план на период 15–15
+    var fact     = sumIn(g, p);
+
+    var planNow = target * (gone / total);
+    var left    = Math.max(0, target - fact);
+    var perDay  = fact / Math.max(1, gone);
+    var needDay = daysLeft > 0 ? left / daysLeft : 0;
+    var etaDays = perDay > 0 ? Math.ceil(left / perDay) : null;
+    var eta     = etaDays != null ? new Date(now.getTime() + etaDays * MS) : null;
+    var etaDelta = eta ? Math.ceil((eta - p.to) / MS) : null;
+
+    var streak = 0;
+    for (var k = 1; k <= 36; k++){
+      if (target > 0 && sumIn(g, shift(p, -k)) >= target - 0.5) streak++; else break;
+    }
+    return { ps: ps, planNow: planNow, fact: fact, left: left, ahead: 1,
+      daysLeft: daysLeft, daysGone: gone, perDay: perDay, needDay: needDay,
+      eta: eta, etaDelta: etaDelta, streak: streak,
+      need: left, delta: fact - planNow,
+      eff: planNow > 0 ? fact / planNow * 100 : (fact ? 100 : 0),
+      pct: target ? Math.min(100, fact / target * 100) : 0,
+      planPct: target ? Math.min(100, planNow / target * 100) : 0,
+      periodFrom: p.from, periodTo: p.to };
+  };
+
+  /* ---------- 2. даты по краям полосы ---------- */
+  var css = document.createElement('style');
+  css.textContent =
+    '#gstrip .pbig>small.gp-d{position:absolute;top:50%;transform:translateY(-50%);font-size:10px;' +
+    'font-weight:600;opacity:.8;pointer-events:none;text-shadow:0 1px 3px rgba(0,0,0,.6);z-index:2}' +
+    '#gstrip .pbig>small.gp-a{left:9px}#gstrip .pbig>small.gp-b{right:9px}';
+  document.head.appendChild(css);
+
+  if (typeof rStrip === 'function'){
+    var origStrip = rStrip;
+    rStrip = function(){
+      origStrip.apply(this, arguments);
+      try {
+        var strip = document.getElementById('gstrip');
+        var bar = strip && strip.querySelector('.pbig'); if (!bar) return;
+        var nm = strip.querySelector('.gs-n'); if (nm) nm.remove();          // без «★ Цель»
+        var g = (S.goals||[]).find(function(x){ return x.fav; });
+        if (g){                                                             // цвет по достижению цели
+          var pct = goalStat(g).pct;                                        // 0 → красный, 50 → жёлтый, 100 → зелёный
+          var col = 'hsl(' + Math.round(120 * Math.max(0, Math.min(100, pct)) / 100) + ',78%,47%)';
+          var fill = bar.querySelector('i'), mark = bar.querySelector('u');
+          if (fill) fill.style.background = col;
+          if (mark) mark.style.background = col;
+        }
+        var p = periodAt(new Date(today));
+        bar.insertAdjacentHTML('beforeend',
+          '<small class="gp-d gp-a">с ' + dm(p.from) + '</small><small class="gp-d gp-b">по ' + dm(p.to) + '</small>');
+      } catch(e){}
+    };
+  }
+
+  /* ---------- 3. поступления за период в карточке цели ---------- */
+  if (typeof goalModal === 'function'){
+    var origModal = goalModal;
+    goalModal = function(g){
+      origModal(g);
+      try { swap(g); } catch(e){}
+    };
+  }
+  function swap(g){
+    var mb = document.getElementById('mBody'); if (!mb) return;
+    var lab = null, ls = mb.querySelectorAll('label');
+    for (var i = ls.length - 1; i >= 0; i--)
+      if (/^(Взносы|Поступления за)/.test(ls[i].textContent.trim())) { lab = ls[i]; break; }
+    if (!lab) return;
+
+    var p = periodAt(new Date(today));
+    var list = incomesIn(p).sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); });
+    lab.textContent = 'Поступления за период с ' + dm(p.from) + ' по ' + dm(p.to) +
+      ' (' + list.length + ') — клик, чтобы изменить или удалить';
+
+    var html = list.length
+      ? '<div class="plist">' + list.map(function(t){
+          return '<div class="pr" data-gtx="' + esc(t.id) + '" style="cursor:pointer">' +
+            '<span class="n">' + String(t.date).split('-').reverse().join('.') +
+            '<span class="hint"> · ' + esc(t.category||'') + (t.note ? ' · ' + esc(t.note) : '') + '</span></span>' +
+            '<b class="in">+' + f(txRub(t)) + ' ₽</b></div>';
+        }).join('') + '</div>'
+      : '<div class="empty">За этот период поступлений ещё нет</div>';
+
+    var box = lab.nextElementSibling;
+    if (box) { box.insertAdjacentHTML('afterend', html); box.remove(); }
+    else lab.insertAdjacentHTML('afterend', html);
+
+    var node = lab.nextElementSibling;
+    if (node) node.onclick = function(e){
+      var r = e.target.closest('[data-gtx]'); if (!r) return;
+      e.stopPropagation();
+      var t = (S.tx||[]).find(function(x){ return x.id === r.dataset.gtx; });
+      if (t) txModal(t, function(){ goalModal(g); });
+    };
+  }
+
+  try { if (typeof render === 'function') render(); } catch(e){}
+})();
+</script>
+
 </body>
 </html>
